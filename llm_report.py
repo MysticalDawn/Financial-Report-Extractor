@@ -14,7 +14,7 @@ from langchain.schema import Document
 import unicodedata
 
 
-keywords = {
+revenue_keywords = {
     "revenue": {
         "English": [
             {"phrase": "Revenue"},
@@ -65,6 +65,40 @@ keywords = {
     },
 }
 
+# IPO‐only keyword list
+ipo_keywords = {
+    "English": [
+        "IPO",
+        "Initial Public Offering",
+        "Prospectus",
+        "Red Herring Prospectus",
+        "Supplementary Prospectus",
+        "Offer Price",
+        "Offer Shares",
+        "Total Offer Size",
+        "Offering Proceeds",
+        "Net Offering Proceeds",
+        "Use of Proceeds",
+        "Book-building",
+        "Lock-up Period",
+        "CMA approval",
+    ],
+    "Arabic": [
+        "نشرة الإصدار",
+        "النشرة الأولية",
+        "النشرة النهائية",
+        "نشرة الإصدار التكميلية",
+        "سعر الطرح",
+        "أسهم الطرح",
+        "إجمالي العرض",
+        "متحصلات الطرح",
+        "استخدام متحصلات الطرح",
+        "بناء سجل الأوامر",
+        "فترة الحظر",
+        "موافقة الهيئة",
+    ],
+}
+
 
 # ==================== ENVIRONMENT SETUP ====================
 
@@ -96,12 +130,13 @@ def fix_arabic(text):
 # ==================== LOADING AND SPLITTING ====================
 
 
-def load_and_split_pdf(pdf_path: str, window_chars: int = 550):
+def load_and_split_pdf(pdf_path: str, window_chars: int = 550, choice: str = "1"):
     """Load PDF and extract keyword matches with context.
 
     Args:
         pdf_path: Path to the PDF file
         window_chars: Number of characters to include around keyword matches
+        choice: User's choice ('1' for revenue, '2' for IPO)
 
     Returns:
         List of Document objects containing keyword matches with context
@@ -118,6 +153,18 @@ def load_and_split_pdf(pdf_path: str, window_chars: int = 550):
     # Normalize text for comparison
     text = unicodedata.normalize("NFC", text)
     text_lower = text.lower()
+
+    # Select appropriate keywords based on choice
+    keywords = (
+        revenue_keywords
+        if choice == "1"
+        else {
+            "ipo": {
+                "English": [{"phrase": k} for k in ipo_keywords["English"]],
+                "Arabic": [{"phrase": k} for k in ipo_keywords["Arabic"]],
+            }
+        }
+    )
 
     # Pre-process keywords for consistent comparison
     processed_keywords = []
@@ -234,9 +281,26 @@ def main():
     api_key = load_environment()
 
     # Use a Saudi IPO prospectus
-    pdf_path = "./data/alkuzama.pdf"  # Changed to a Saudi IPO prospectus
+    pdf_path = "./data/salama.pdf"  # Changed to a Saudi IPO prospectus
     print(f"Loading PDF from: {pdf_path}")
-    docs = load_and_split_pdf(pdf_path)
+
+    # Ask user for their choice
+    print("\nWhat would you like to extract?")
+    print("1. Revenue Information")
+    print("2. IPO Details")
+
+    while True:
+        try:
+            choice = input("\nEnter your choice (1 or 2): ").strip()
+            if choice not in ["1", "2"]:
+                print("Please enter either 1 or 2")
+                continue
+            break
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            return
+
+    docs = load_and_split_pdf(pdf_path, choice=choice)
     print(f"Created {len(docs)} documents from PDF")
 
     if not docs:
@@ -245,11 +309,11 @@ def main():
 
     embeddings = initialize_embeddings(api_key)
     docsearch = FAISS.from_documents(docs, embeddings)
-
     chain = initialize_qa_chain()
 
-    # Example query
-    query = """
+    # Select appropriate query based on user choice
+    if choice == "1":
+        query = """
 You are a financial data extraction assistant for Saudi Arabia financial reports, in both Arabic and English.  
 
 CRITICAL PRIORITY: Always extract the NEWEST/MOST RECENT data available. Look for:
@@ -300,11 +364,60 @@ If summary sections are found, use them as the primary source. If not, proceed w
 ---
 
 IMPORTANT: Always prioritize and clearly indicate the newest/most recent data available. If multiple years are present, explicitly state which year's data you're using and why it's the most recent.
-
 """
+    else:  # choice == '2'
+        query = """
+You are a financial data extraction assistant for Saudi Arabia IPO prospectuses (نشرات الإصدار) in Arabic and English.  
+Use the following keywords to locate the company's **latest IPO details**:
 
+English keywords:
+{eng}
+
+Arabic keywords:
+{arb}
+
+✅ Extract:
+- Offer Price (with currency)
+- Number of Shares Offered
+- Total Offer Size (with currency)
+- Offering / Subscription Period (start & end dates)
+- Expected Listing Date
+- Book-building details (process or dates)
+- Lock-up Period (duration)
+- Use of Proceeds (text summary)
+- Receiving Agents (list, if any)
+- CMA Approval (yes/no + date)
+
+💡 Normalize:
+- Convert Arabic-Indic numerals → Western digits
+- Expand "مليون"/"ألف" or "million"/"thousand" → full integer
+- Dates → ISO format YYYY-MM-DD
+- Currency symbols → 3-letter ISO codes
+
+🎯 Output format:
+
+IPO Details:
+------------
+Offer Price: [amount] [currency]
+Shares Offered: [number]
+Total Offer Size: [amount] [currency]
+Offering Period: [start] to [end]
+Expected Listing Date: [date]
+Book-building: [details]
+Lock-up Period: [details]
+Use of Proceeds: [text]
+Receiving Agents: [list]
+CMA Approval: [yes/no + date]
+
+If any field is not found, return "Not found in document."
+""".format(
+            eng=", ".join(ipo_keywords["English"]),
+            arb=", ".join(ipo_keywords["Arabic"]),
+        )
+
+    print("\nProcessing your request...")
     answer = ask_question(docsearch, chain, query)
-    print(f"Answer: {answer}")
+    print(f"\nResults:\n{answer}")
 
 
 if __name__ == "__main__":
