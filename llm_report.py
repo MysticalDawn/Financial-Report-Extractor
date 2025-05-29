@@ -1,8 +1,11 @@
+# ==================== IMPORTS ====================
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
-from langchain_openai import OpenAI, OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import OpenAI, ChatOpenAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
 import re
 from PyPDF2 import PdfReader
 import arabic_reshaper
@@ -15,6 +18,13 @@ import unicodedata
 from queries import get_query
 from keywords import get_keywords
 from langdetect import detect, LangDetectException
+from langchain_anthropic import ChatAnthropic
+import torch
+
+# ==================== LANGUAGE DETECTION ====================
+load_dotenv()
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 # Add this new function for language detection
@@ -37,7 +47,6 @@ def detect_language(text: str) -> str:
 
 
 def load_environment():
-    load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("Please set the OPENAI_API_KEY environment variable.")
@@ -63,7 +72,7 @@ def fix_arabic(text):
 # ==================== LOADING AND SPLITTING ====================
 
 
-def load_and_split_pdf(pdf_path: str, window_chars: int = 280, choice: str = "1"):
+def load_and_split_pdf(pdf_path: str, window_chars: int = 1500, choice: str = "1"):
     """Load PDF and extract keyword matches with context.
 
     Args:
@@ -152,15 +161,30 @@ def load_and_split_pdf(pdf_path: str, window_chars: int = 280, choice: str = "1"
 
 
 def initialize_embeddings(api_key: str):
-    return OpenAIEmbeddings(
-        model="text-embedding-3-large",
-        api_key=api_key,
-        base_url="https://api.openai.com/v1",
+    """Initialize HuggingFace embeddings.
+
+    Args:
+        api_key: Not used for HuggingFace embeddings, kept for compatibility
+
+    Returns:
+        HuggingFaceEmbeddings instance
+    """
+    # Check if MPS is available (for Apple Silicon Macs)
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": device},
+        encode_kwargs={"normalize_embeddings": True},
     )
 
 
 def initialize_qa_chain():
-    return load_qa_chain(ChatOpenAI(model="gpt-4.1", temperature=0), chain_type="stuff")
+    return load_qa_chain(
+        ChatAnthropic(model_name="claude-opus-4-20250514", temperature=0, verbose=True),
+        chain_type="stuff",
+    )
 
 
 # ==================== QA FUNCTION ====================
@@ -168,7 +192,7 @@ def initialize_qa_chain():
 
 def ask_question(docsearch, chain, query: str, max_docs: int = 5):
     try:
-        docs = docsearch.similarity_search(query, k=max_docs * 3000)
+        docs = docsearch.similarity_search(query, k=max_docs)
 
         # Filter docs to fit in token budget
         MAX_MODEL_TOKENS = 25000
@@ -205,7 +229,7 @@ def main():
     api_key = load_environment()
 
     # Use a Saudi IPO prospectus
-    pdf_path = "./data/almoosa.pdf"  # Changed to a Saudi IPO prospectus
+    pdf_path = "./data/pru.pdf"  # Changed to a Saudi IPO prospectus
     print(f"Loading PDF from: {pdf_path}")
 
     # Ask user for their choice
