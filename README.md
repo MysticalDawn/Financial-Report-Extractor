@@ -1,17 +1,16 @@
 # Financial Report Extractor
 
-A powerful tool for extracting and analyzing financial data from various report formats.
+A tool for extracting and analyzing financial data from various report formats.
 
 ## Overview
 
-This project provides a robust solution for extracting financial information from different types of reports, making it easier to analyze and process financial data efficiently.
+This project provides a robust solution for extracting financial information from different types of financial reports, making it easier to analyze and process financial data efficiently.
 
 ## Features
 
-- Extract financial data from various report formats
+- Extract financial data from reports
 - Process and analyze extracted information
 - Export data in structured formats
-- Support for multiple input file types
 
 ## Prerequisites
 
