@@ -1,0 +1,34 @@
+# Core dependencies
+langchain-community>=0.0.10
+langchain>=0.1.0
+langchain-openai>=0.0.2
+langchain-anthropic>=0.1.0
+
+# PDF processing
+PyPDF2>=3.0.0
+
+# Arabic text processing
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Tokenization and text processing
+tiktoken>=0.5.1
+
+# Vector search and embeddings
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+
+# Language detection
+langdetect>=1.0.9
+
+# PyTorch (for embeddings)
+torch>=2.0.0
+
+# Development dependencies (optional)
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
